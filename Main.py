@@ -1,46 +1,72 @@
-import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-TOKEN = os.environ.get("BOT_TOKEN")
+# Kullanıcı bilgileri (sadece bu kullanıcı erişebilecek)
+AUTHORIZED_USER = {
+    "username": "imdat",
+    "password": "1i2m3d4a5t",
+    "id": 16321123
+}
 
-# Başlangıç mesajı
+# Kullanıcı durumunu takip etmek için hafıza (basit)
+user_sessions = {}
+
+# Menü butonları
+main_menu = [["🎴 Dua Kartları", "📜 Kutsal Kitaplar"], ["🌍 Uygarlıklar", "🔮 Astroloji & Kabala"]]
+
+# Kullanıcı doğrulama komutu
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("📿 Günlük Dua", callback_data='daily_prayer')],
-        [InlineKeyboardButton("📖 Günlük Söz", callback_data='daily_quote')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("📜 Sırlar Kapısı'na hoş geldiniz.\nBir seçim yapınız:", reply_markup=reply_markup)
+    user = update.effective_user
+    if user.username != AUTHORIZED_USER["username"]:
+        await update.message.reply_text("Erişim reddedildi! Kullanıcı adı hatalı.")
+        return
+    user_sessions[user.id] = {"authenticated": False}
+    await update.message.reply_text(
+        "Hoşgeldin İmdat! Lütfen şifreni gönder.",
+    )
 
-# Buton seçimlerini yakalama
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+# Şifre doğrulama
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    text = update.message.text.strip()
 
-    if query.data == "daily_prayer":
-        text = generate_prayer()
-    elif query.data == "daily_quote":
-        text = generate_quote()
+    if user.id not in user_sessions:
+        await update.message.reply_text("Lütfen önce /start komutunu kullan.")
+        return
+
+    session = user_sessions[user.id]
+
+    if not session["authenticated"]:
+        if text == AUTHORIZED_USER["password"]:
+            session["authenticated"] = True
+            await update.message.reply_text(
+                "Başarıyla giriş yaptınız.\nMenüden bir seçenek seçin:",
+                reply_markup=ReplyKeyboardMarkup(main_menu, one_time_keyboard=True, resize_keyboard=True)
+            )
+        else:
+            await update.message.reply_text("Şifre yanlış, tekrar deneyin.")
+        return
+
+    # Kullanıcı menü seçimi
+    if text == "🎴 Dua Kartları":
+        await update.message.reply_text("Dua Kartları modülüne hoşgeldiniz! Kodu kopyala:\n<DUA KODU>")
+    elif text == "📜 Kutsal Kitaplar":
+        await update.message.reply_text("Kutsal Kitaplar modülüne hoşgeldiniz! Kodu kopyala:\n<KUTSAL KİTAP KODU>")
+    elif text == "🌍 Uygarlıklar":
+        await update.message.reply_text("Uygarlıklar modülüne hoşgeldiniz! Kodu kopyala:\n<UYGARLIK KODU>")
+    elif text == "🔮 Astroloji & Kabala":
+        await update.message.reply_text("Astroloji ve Kabala modülüne hoşgeldiniz! Kodu kopyala:\n<ASTROLOJİ KODU>")
     else:
-        text = "❓ Geçersiz seçim."
+        await update.message.reply_text("Lütfen menüden geçerli bir seçenek seçin.")
 
-    await query.edit_message_text(text=text)
+# Ana fonksiyon
+def main():
+    application = ApplicationBuilder().token("BOT_TOKENINIZI_BURAYA_YERLEŞTİRİN").build()
 
-# Günlük dua örneği
-def generate_prayer():
-    return (
-        "🕊️ **Günün Hurûf-u Mukattaa Duası**\n\n"
-        "📿 Ya Allah, Ya Hafîz, Ya Nur...\n"
-        "Bu harflerin sırrıyla kalplerimize ferahlık, sözlerimize hikmet ver.\n\n"
-        "📅 Tarih: 01.06.2025"
-    )
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# Günlük söz örneği
-def generate_quote():
-    return (
-        "🗝️ **Günün Sözü**\n\n"
-        "Her harf bir sırdır; bazen dua, bazen anahtar.\n"
-        "Every letter is a secret; sometimes a prayer, sometimes a key.\n\n"
-        "📅 Tarih: 01.06.2025"
-    )
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
